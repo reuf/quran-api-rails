@@ -1,5 +1,5 @@
+# vim: ts=4 sw=4 expandtab
 module Schema
-    # mattr_accessor :schema_name
     @@schema_name = Hash.new
     def table_name
         # This is the old way of doing it. I think we will no longer use this
@@ -7,35 +7,28 @@ module Schema
         
         # New way
         self.name.split("::").first.downcase << '.' << super
-
     end
 
     def self.schema_name
         @@schema_name
     end
 
-    def self.schema_name=(schema_name)
-        # Rails.logger.ap schema_name
-        # Rails.logger.ap @@schema_name
-
-        # @@schema_name["#{schema_name}"] = schema_name
+    def self.schema_name(module_name, schema_name)
+        @@schema_name[ "#{module_name}" ] = schema_name
     end
 
     # When this module is included, callback this function
-    def self.included(mod)
-        Rails.logger.info mod
+    def self.included( inc_mod )
+        # Rails.logger.info "#{ inc_mod } included Schema"
         # Then add a callback function `self.extended` to the module that
         # includes schema module
-        mod.instance_eval do
+        inc_mod.instance_eval do
             # Create method `self.extended` on the child module
-            def extended(mod)
+            def extended( ext_mod )
+                # Rails.logger.info "#{ ext_mod } extended"
                 # Include the elasticsearch concern
-                mod.include(Searchable)
-
-                # This is commented out but you can, if you wish, invoke a function
-                # this function would be in the Schema.rb file and would be an instance
-                # function to the child module
-                # mod.send :include_elasticsearch, mod
+                ext_mod.include( Searchable )
+                ext_mod.extend( Searchable ) # TODO recall why we're both including and extending? was this experimental?
             end
         end
     end

@@ -4,6 +4,10 @@
 NOTES
 =====
 
+Before you begin
+----------------
+You must note that while we would like to be eager with upgrading to the latest Rails version, our biggest contingency is compositive-primary-keys gem which is playing catch up with the Rails versions especially that every new update does something to ActiveRecord and breaks CPK! So make sure CPK is happy with the Rails version first before jumping.
+
 Database
 --------
 
@@ -58,6 +62,7 @@ View mappings: in browser - `http://localhost:9200/quran/_mapping`
       e.g. Quran::Text.__elasticsearch__.client
     - http://www.rubydoc.info/gems/elasticsearch-api/Elasticsearch/API
     - https://github.com/elasticsearch/elasticsearch-ruby/tree/master/elasticsearch-api
+
 
 
 #### Pre-build tasks:

@@ -1,3 +1,4 @@
+# vim: ts=4 sw=4 expandtab
 class Content::TafsirAyah < ActiveRecord::Base
     extend Content
     extend Batchelor
@@ -5,25 +6,39 @@ class Content::TafsirAyah < ActiveRecord::Base
     self.table_name = 'tafsir_ayah'
     self.primary_keys = :tafsir_id, :ayah_key
 
+    # relationships
     belongs_to :tafsir, class_name: 'Content::Tafsir'
-    belongs_to :ayah, class_name: 'Quran::Ayah'
+    belongs_to :ayah,   class_name: 'Quran::Ayah', foreign_key: 'ayah_key'
 
-    ########## ES FUNCTIONS ##################################################
-    document_type "tafsir"
-    mapping :_parent => { :type => 'ayah' }, :_routing => { :path => 'ayah_key', :required => true } do
-      indexes :resource_id, type: "integer"
-      indexes :ayah_key
-      indexes :text, term_vector: "with_positions_offsets_payloads"
-    end
+    # scope
+    # default_scope { where ayah_key: -1 }
+
+    index_name "tafsir" # NOTE we're overriding the index name from tafsir_ayah to tafsir
 
     def self.import( options = {} )
-        transform = lambda do |a|
-            { index: { _id: "#{a.tafsir.resource_id},#{a.ayah_key}", _parent: a.ayah_key, data: a.__elasticsearch__.as_indexed_json.merge( a.tafsir.__elasticsearch__.as_indexed_json ) } }
+        Content::TafsirAyah.connection.cache do
+            transform = lambda do |a|
+                this_data = a.__elasticsearch__.as_indexed_json.merge( a.tafsir.__elasticsearch__.as_indexed_json )
+                ayah_data = a.ayah.__elasticsearch__.as_indexed_json
+                this_data.delete( 'ayah_key' )
+                ayah_data.delete( 'text' )
+                ayah_data[ 'ayah_key' ].gsub!( /:/, '_' )
+
+
+                resource_data = a.tafsir.resource.__elasticsearch__.as_indexed_json
+                language_data = a.tafsir.resource.language.__elasticsearch__.as_indexed_json
+
+                {   index:   {
+                    _id:     "#{a.tafsir.resource_id}_#{ayah_data[ 'ayah_key' ]}",
+                    data:    this_data.merge( { 'ayah' => ayah_data, 'resource' => resource_data, 'language' => language_data } )
+                } }
+            end
+            options = { transform: transform, batch_size: 6236 }.merge( options )
+            self.importing options
         end
-        options = { transform: transform, batch_size: 6236 }.merge( options )
-        self.importing options 
     end
 end
+
 # notes:
 # - a simple bridge table connecting to ayahs
 #   since one tafsir can pertain to an entire contingent range of ayat, not just a single ayah

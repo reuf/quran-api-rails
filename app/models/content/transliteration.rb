@@ -1,3 +1,4 @@
+# vim: ts=4 sw=4 expandtab
 class Content::Transliteration < ActiveRecord::Base
     extend Content
     extend Batchelor
@@ -5,41 +6,39 @@ class Content::Transliteration < ActiveRecord::Base
     self.table_name = 'transliteration'
     self.primary_keys = :resource_id, :ayah_key
 
+    # relationships
     belongs_to :resource, class_name: 'Content::Resource'
-    belongs_to :ayah, class_name: 'Quran::Ayah'
+    belongs_to :ayah,     class_name: 'Quran::Ayah', foreign_key: 'ayah_key'
 
+    # scope
+    # default_scope { where resource_id: -1 } # NOTE uncomment or modify to disable/experiment on the elasticsearch import
 
-    ########## ES FUNCTIONS ##################################################
-    document_type "transliteration"
-    mapping :_parent => { :type => 'ayah' }, :_routing => { :path => 'ayah_key', :required => true } do
-      indexes :resource_id, type: "integer"
-      indexes :ayah_key
-      indexes :text, term_vector: "with_positions_offsets_payloads"
-    end
-
-    def self.import(options = {})
-        transform = lambda do |a|
-            {index: {_id: "#{a.resource_id},#{a.ayah_key}", _parent: a.ayah_key, data: a.__elasticsearch__.as_indexed_json}} 
+    def self.import ( options = {} )
+        Content::Transliteration.connection.cache do
+            transform = lambda do |a|
+                this_data = a.__elasticsearch__.as_indexed_json
+                ayah_data = a.ayah.__elasticsearch__.as_indexed_json
+                this_data.delete( 'ayah_key' )
+                ayah_data.delete( 'text' )
+                ayah_data[ 'ayah_key' ].gsub!( /:/, '_' )
+                { index:      {
+                    _id:      "#{a.resource_id}_#{ayah_data[ 'ayah_key' ]}",
+                    data:     this_data.merge( { 'ayah' => ayah_data } )
+                } }
+            end
+            options = { transform: transform, batch_size: 6236 }.merge( options )
+            self.importing options
         end
-        options = { transform: transform, batch_size: 6236 }.merge(options)
-        self.importing options 
     end
 
     # def as_indexed_json(options={})
     #     self.as_json(
-        
     #         # methods: [:resource_info],
     #         include: {
     #             resource: {
     #                 only: [:slug, :name, :type]
     #             }
     #         }
-
     #     )
     # end
-
-
-
 end
-# notes:
-# - provides a 'text' column
